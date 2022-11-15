@@ -38,7 +38,148 @@ spaghetti = long %>% pivot_longer(week_1:week_8,
   viridis::scale_color_viridis(discrete = TRUE)
 
 spaghetti
+
+```
+
+## Problem 2
+
+```{r}
+#Importing the homicide file into R
+csvurl <- 'https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv'
+rawhomicide <- read_csv(url(csvurl), show_col_types = FALSE)
+
+#summarise number of homicides within 51 city_states
+homicide <- rawhomicide %>% 
+  mutate(city_state = str_c(city,",",state),
+         status = case_when(
+           disposition == "Closed by arrest" ~ "solved",
+           disposition == "Closed without arrest" ~ "unsolved",
+           disposition == "Open/No arrest" ~ "unsolved"
+         )) %>%
+  select(uid,city_state,reported_date,victim_last,victim_first,victim_race,victim_age,victim_sex,lat,lon,status)
+```
+The raw homicide data contains 52,179 observations and 12 columns. 7 of them are character variables, 5 of them are numeric variables, and in the numeric variables there is a variable for unique ID and a varible for date. There are 51 city_states. 
+
+```{r, warning=FALSE}
+num_of_hom <- homicide %>%
+  group_by(city_state) %>% 
+  summarise(total_homicide = n(),
+            unsolve = sum(status == "unsolved"))
+
+#using prop.test to estimate proportion of unsolved homicides in Baltimore
+balt <- num_of_hom %>%
+  filter(city_state == "Baltimore,MD")
+
+estimate <- prop.test(
+  x = balt %>% pull(unsolve),
+  n = balt %>% pull(total_homicide)) %>% broom::tidy()
+
+#save the output of prop.test as an R object
+estimate_proportion <- estimate %>% pull(estimate)
+ci_low <- estimate %>% pull(conf.low)
+ci_up <- estimate %>% pull(conf.high)
+
+balt_output <- list(
+  "proportion_estimate" = estimate_proportion,
+  "lower_CI_bound" = ci_low,
+  "upper_CI_bound" = ci_up
+) %>%
+  bind_rows() %>%
+  broom::tidy()
+save(balt_output, file = "./baltimore_output.RData")
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+#prop.test for each city, and pull both porprotion and confidence intervals.
+
+#function
+proptest <- function(homcity) {
+  city_estimate <- prop.test(
+  x = balt %>% pull(unsolve),
+  n = balt %>% pull(total_homicide)) 
+  return(city_estimate)
+}
+
+#test all city
+test_city = num_of_hom %>%
+  nest(data=-city_state) %>%
+  mutate(prop_test = map(data, proptest),
+         tidy = map(prop_test, broom::tidy)) %>%
+  select(city_state,tidy) %>%
+  unnest(tidy) %>%
+  select(city_state,estimate,starts_with('con')) %>% 
+  arrange(desc(estimate))
+
+head(test_city) %>%
+  knitr::kable()
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+#Plot for estimate and CIs
+test_city %>%
+  ggplot(aes(x = city_state, y = estimate)) + 
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) + 
+  ggtitle("Proportion Estimate for Unsolved Homicides In Each City") + 
+  xlab("City, State") +
+  ylab("Proportion Estimate for Unsolved Homicides") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+##Problem 3
+
+```{r, warning=FALSE, message=FALSE}
+#setup elements
+set <- rerun(5000, rnorm(n = 30, mean = 0, sd = 5))
+
+#t-test function
+ttest <- function(mu = 0) {
+  set = tibble(rnorm(n = 30, mean = mu, sd = 5))
   
+  output = t.test(set) %>%
+    broom::tidy() %>%
+    select(estimate, p.value)
+  
+  output
+}
+
+#apply ttest to 5000 samples with mean = 0
+same_mean <- expand.grid(mean = 0, iteration = 1:5000) %>%
+  mutate(output = map(mean,ttest)) %>% 
+  unnest(output)
+
+#apply ttest to 5000 samples with means from 1 to 6
+diff_mean <- expand.grid(mean=1:6, iteration = 1:5000) %>%
+  mutate(output = map(mean,ttest)) %>%
+  unnest(output)
+
+```
+
+```{r, warning=FALSE, message=FALSE}
+#find out proportion of times that null is rejected
+reject_null <- diff_mean %>%
+  filter(p.value<0.05) %>%
+  group_by(mean) %>%
+  summarise(reject_proportion = sum(p.value<0.5)/5000)
+
+power_plot <- reject_null %>% 
+  ggplot(aes(x = mean, y = reject_proportion)) +
+  scale_x_continuous(limits = c(1,6), breaks = seq(1,6,1)) + 
+  geom_point() + 
+  geom_path() +
+  xlab("Mean") +
+  ylab("Proportion of Rejected Tests") +
+  ggtitle("t-test Power in Different Means")
+
+power_plot
+
+#find out average estimate of mean in samples where null were rejected
+avg_est <- diff_mean %>% 
+  group_by(mean) %>%
+  summarise(average_estimate = mean(estimate, na.rm = TRUE))
+
 
 
 ```
