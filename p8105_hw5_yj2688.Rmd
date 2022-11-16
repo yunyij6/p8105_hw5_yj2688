@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "p8105_hw5_yj2688"
 output: github_document
 ---
 
@@ -14,7 +14,7 @@ library(patchwork)
 set.seed(10)
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 files = list.files("./data", pattern = ".csv", all.files = FALSE, 
 full.names = FALSE)
 
@@ -43,7 +43,7 @@ spaghetti
 
 ## Problem 2
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 #Importing the homicide file into R
 csvurl <- 'https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv'
 rawhomicide <- read_csv(url(csvurl), show_col_types = FALSE)
@@ -60,7 +60,7 @@ homicide <- rawhomicide %>%
 ```
 The raw homicide data contains 52,179 observations and 12 columns. 7 of them are character variables, 5 of them are numeric variables, and in the numeric variables there is a variable for unique ID and a varible for date. There are 51 city_states. 
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, message=FALSE}
 num_of_hom <- homicide %>%
   group_by(city_state) %>% 
   summarise(total_homicide = n(),
@@ -175,11 +175,41 @@ power_plot <- reject_null %>%
 
 power_plot
 
-#find out average estimate of mean in samples where null were rejected
+#find out average estimate of mean
 avg_est <- diff_mean %>% 
   group_by(mean) %>%
   summarise(average_estimate = mean(estimate, na.rm = TRUE))
 
+avg_plot <- avg_est %>%
+  ggplot(aes(x = mean, y = average_estimate)) +
+  scale_x_continuous(limits = c(1,6), breaks = seq(1,6,1)) + 
+  geom_point() + 
+  geom_path() +
+  xlab("Mean") +
+  ylab("Average Estimation") +
+  ggtitle("Average Estimation in Different Means")
 
+avg_plot
+
+#find out average estimate of mean in samples that were rejected
+reject_and_est <- diff_mean %>%
+  filter(p.value<0.05) %>%
+  group_by(mean) %>% 
+  summarise(reject_proportion = sum(p.value<0.5)/5000, 
+            average_estimate = mean(estimate, na.rm = TRUE))
+ggplot(data = reject_and_est, aes(x = mean, y = average_estimate)) + 
+  geom_line(aes(x = mean, y = average_estimate, col = "red")) + 
+  geom_point(aes(x = mean, y = average_estimate, col = "red")) + 
+  geom_line(aes(x = mean, y = reject_proportion, col = "green")) +
+  geom_point(aes(x = mean, y = reject_proportion, col = "green")) + 
+  scale_x_continuous(limits = c(1,6), breaks = seq(1,6,1)) + 
+  xlab("Mean") +
+  ylab("Average Estimation") +
+  ggtitle("Average Estimation VS. t-test Power in Different Means") + 
+  scale_color_manual(labels = c("Test Power", "Average Estimate"), values = c("green", "red"))
 
 ```
+
+There is a positive relationship between effect size and power. When effect size increases, the power increases. 
+
+The overall sample average estimation for different means are not equal to the null-rejected average estimation for different means. The overall average estimation is linear and it increase with the sample mean. The estimate when the null is rejected is affected by the test power. 
